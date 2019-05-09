@@ -137,6 +137,23 @@ class MigrationExecutor(DjangoMigrationExecutor):
         for migration, _ in plan:
             self.unapply_migration(states[migration], migration, fake=fake)
 
+    def check_replacements(self):
+        """
+        Mark replacement migrations applied if their replaced set all are.
+
+        We do this unconditionally on every migrate, rather than just when
+        migrations are applied or unapplied, so as to correctly handle the case
+        when a new squash migration is pushed to a deployment that already had
+        all its replaced migrations applied. In this case no new migration will
+        be applied, but we still want to correctly maintain the applied state
+        of the squash migration.
+        """
+        applied = self.recorder.applied_migrations()
+        for key, migration in self.loader.replacements.items():
+            all_applied = all(m in applied for m in migration.replaces)
+            if all_applied and key not in applied:
+                self.recorder.record_applied(*key)
+
 
 def monkeypatch(module):
     module.MigrationExecutor = MigrationExecutor
